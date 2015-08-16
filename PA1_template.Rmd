@@ -4,22 +4,107 @@ output:
   html_document:
     keep_md: true
 ---
+## load needed libraries
 
+```{r}
+library(plyr)
+library(ggplot2)
+library(data.table)
+
+```
+
+## unzip activity.zip to read the csv
+
+```{r}
+unzip(file.path(getwd(), "activity.zip") ,exdir=".")
+
+```
 
 ## Loading and preprocessing the data
 
 
+```{r}
+activity_data <- data.table(read.csv('activity.csv', header = TRUE))
+activity_data$DateField <- as.Date(activity_data$date)
+na_data <- complete.cases(activity_data)
+activity_data1 <- activity_data[na_data,]
+summ_per_day <- ddply(activity_data1, "DateField", summarize, 
+                      steps=sum(steps),
+                      interval=sum(interval) )
+
+```
+
+```{r}
+qplot(steps, data=summ_per_day, binwidth=1000)
+```
 
 ## What is mean total number of steps taken per day?
+```{r echo=FALSE}
+ototal <- sum(summ_per_day$steps)
+omean <- mean(summ_per_day$steps)
+omedian <- median(summ_per_day$steps)
 
-
+```
+### Summary (Data With NA)
+- Total steps: `r ototal`
+- Mean Steps Per Day: `r omean`
+- Median of steps Per Day: `r omedian`
 
 ## What is the average daily activity pattern?
-
-
+```{r}
+daily_intervals <- activity_data[, list(ms = mean(steps, na.rm=TRUE)), interval]
+ggplot(daily_intervals, aes(x=interval, y=ms)) + geom_line()
+```
 
 ## Imputing missing values
+```{r  echo=FALSE}
+all_na = sum(is.na(activity_data))
+```
 
+There are `r all_na` missing Values
+
+```{r}
+imputed_data <- transform(activity_data, steps = ifelse(is.na(activity_data$steps),                                                        daily_intervals$ms[match(activity_data$interval,                                                                       daily_intervals$interval)], 
+                                      activity_data$steps))
+
+imp_summ_per_day <- ddply(imputed_data, "DateField", summarize, 
+                      steps=sum(steps),
+                      interval=sum(interval) )
+
+qplot(steps, data=imp_summ_per_day, binwidth=1000)
+
+```
+```{r computetime, echo=FALSE}
+itotal <- sum(imp_summ_per_day$steps)
+imean <- mean(imp_summ_per_day$steps)
+imedian <- median(imp_summ_per_day$steps)
+
+diff_total <- ototal -itotal
+diff_mean <- omean -imean
+diff_median <- omedian -imedian
+
+```
+### Summary (Data after imputing)
+- Total steps: `r itotal`
+- Mean Steps Per Day: `r imean`
+- Median of steps Per Day: `r imedian`
+
+### Difference in Data after imputing
+- Total steps: `r diff_total`
+- Mean Steps Per Day: `r diff_mean`
+- Median of steps Per Day: `r diff_median`
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+weekdays <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+imputed_data$dow = as.factor(ifelse(is.element(weekdays(as.Date(imputed_data$DateField)),weekdays), 
+                                    "Weekday", "Weekend"))
+
+steps_by_interval_i <- aggregate(steps ~ interval + dow, imputed_data, mean)
+
+library(lattice)
+
+xyplot(steps_by_interval_i$steps ~ steps_by_interval_i$interval|steps_by_interval_i$dow, main="Average Steps per Day by Interval",xlab="Interval", ylab="Steps",layout=c(1,2), type="l")
+
+```
